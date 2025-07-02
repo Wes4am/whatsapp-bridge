@@ -1,7 +1,7 @@
 const baileysManager = require('../services/baileysManager');
 
 exports.startSession = async (req, res) => {
-  const userId = req.params?.userId || req.body?.userId;
+  const { userId } = req.params;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   try {
@@ -14,7 +14,7 @@ exports.startSession = async (req, res) => {
 };
 
 exports.stopSession = async (req, res) => {
-  const userId = req.params?.userId || req.body?.userId;
+  const { userId } = req.params;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   try {
@@ -26,64 +26,26 @@ exports.stopSession = async (req, res) => {
   }
 };
 
-exports.getStatus = (reqOrUserId, res) => {
-  let userId;
+exports.getStatus = (req, res) => {
   try {
-    if (typeof reqOrUserId === 'string') {
-      userId = reqOrUserId;
-    } else {
-      userId = reqOrUserId.params?.userId || reqOrUserId.query?.userId;
-    }
-
-    if (!userId) {
-      if (res) return res.status(400).json({ error: 'userId required' });
-      throw new Error('userId required');
-    }
-
-    const connected = baileysManager.getStatus(userId);
-
-    if (res) {
-      return res.json({ userId, connected });
-    } else {
-      return connected;
-    }
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const status = baileysManager.getStatus(userId);
+    res.json({ userId, connected: status });
   } catch (error) {
     console.error(error);
-    if (res) {
-      res.status(500).json({ error: 'Failed to get status' });
-    } else {
-      throw error;
-    }
+    res.status(500).json({ error: 'Failed to get status' });
   }
 };
 
-exports.getQR = (reqOrUserId, res) => {
-  let userId;
+exports.getQR = (req, res) => {
   try {
-    if (typeof reqOrUserId === 'string') {
-      userId = reqOrUserId;
-    } else {
-      userId = reqOrUserId.params?.userId || reqOrUserId.query?.userId;
-    }
-
-    if (!userId) {
-      if (res) return res.status(400).json({ error: 'userId required' });
-      throw new Error('userId required');
-    }
-
+    const { userId } = req.params;
+    if (!userId) return res.status(400).json({ error: 'userId required' });
     const qr = baileysManager.getQR(userId);
-
-    if (res) {
-      return res.json({ userId, qr });
-    } else {
-      return qr;
-    }
+    res.json({ userId, qr });
   } catch (error) {
     console.error(error);
-    if (res) {
-      res.status(500).json({ error: 'Failed to get QR' });
-    } else {
-      throw error;
-    }
+    res.status(500).json({ error: 'Failed to get QR' });
   }
 };
