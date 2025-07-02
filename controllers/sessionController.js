@@ -1,23 +1,20 @@
 const baileysManager = require('../services/baileysManager');
 
-// ✅ Start session (generate new QR)
 exports.startSession = async (req, res) => {
-  const { userId } = req.body;
+  const userId = req.params?.userId || req.body?.userId;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   try {
     await baileysManager.startSession(userId);
-    const qr = baileysManager.getQR(userId);
-    res.json({ success: true, message: 'Session started', connected: false, qr });
+    res.json({ success: true, message: 'Session started' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Failed to start session' });
   }
 };
 
-// ✅ Stop session (logout WhatsApp)
 exports.stopSession = async (req, res) => {
-  const { userId } = req.body;
+  const userId = req.params?.userId || req.body?.userId;
   if (!userId) return res.status(400).json({ error: 'userId required' });
 
   try {
@@ -29,17 +26,60 @@ exports.stopSession = async (req, res) => {
   }
 };
 
-// ✅ Get connection status
-exports.getStatus = (req, res) => {
-  const userId = req.params.userId;
-  const connected = baileysManager.getStatus(userId);
-  res.json({ userId, connected });
+exports.getStatus = (reqOrUserId, res) => {
+  try {
+    let userId;
+
+    if (typeof reqOrUserId === 'string') {
+      // Called as getStatus(userId)
+      userId = reqOrUserId;
+    } else {
+      // Called as Express handler
+      userId = reqOrUserId.params?.userId || reqOrUserId.query?.userId;
+    }
+
+    if (!userId) {
+      if (res) return res.status(400).json({ error: 'userId required' });
+      throw new Error('userId required');
+    }
+
+    const connected = baileysManager.getStatus(userId);
+
+    if (res) {
+      return res.json({ userId, connected });
+    } else {
+      return connected;
+    }
+  } catch (error) {
+    console.error(error);
+    if (res) {
+      res.status(500).json({ error: 'Failed to get status' });
+    } else {
+      throw error;
+    }
+  }
 };
 
-// ✅ Get QR code (for dashboard polling)
-exports.getQR = (req, res) => {
-  const userId = req.params.userId;
-  const connected = baileysManager.getStatus(userId);
-  const qr = baileysManager.getQR(userId);
-  res.json({ userId, connected, qr });
-};
+exports.getQR = (reqOrUserId, res) => {
+  try {
+    let userId;
+
+    if (typeof reqOrUserId === 'string') {
+      userId = reqOrUserId;
+    } else {
+      userId = reqOrUserId.params?.userId || reqOrUserId.query?.userId;
+    }
+
+    if (!userId) {
+      if (res) return res.status(400).json({ error: 'userId required' });
+      throw new Error('userId required');
+    }
+
+    const qr = baileysManager.getQR(userId);
+
+    if (res) {
+      return res.json({ userId, qr });
+    } else {
+      return qr;
+    }
+  }
