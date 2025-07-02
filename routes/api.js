@@ -2,18 +2,52 @@ const express = require('express');
 const router = express.Router();
 
 const sessionController = require('../controllers/sessionController');
-const qrController = require('../controllers/qrController');
 
-// Start Session
-router.post('/start-session', sessionController.startSession);
+// Get QR and Status together
+router.get('/:userId/qr-status', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const connected = sessionController.getStatus(userId);
+    const qr = sessionController.getQR(userId);
+    res.json({ connected, qr });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// Stop Session
-router.post('/stop-session', sessionController.stopSession);
+// Start Session (connect)
+router.post('/:userId/connect', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await sessionController.startSession({ body: { userId } }, res);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// Get Status
-router.get('/status/:userId', sessionController.getStatus);
+// Stop Session (disconnect)
+router.post('/:userId/disconnect', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    await sessionController.stopSession({ body: { userId } }, res);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
-// Get QR
-router.get('/qr/:userId', qrController.getQR);
+// Get only Status
+router.get('/:userId/status', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const connected = sessionController.getStatus(userId);
+    res.json({ connected });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 module.exports = router;
