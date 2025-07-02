@@ -27,14 +27,11 @@ exports.stopSession = async (req, res) => {
 };
 
 exports.getStatus = (reqOrUserId, res) => {
+  let userId;
   try {
-    let userId;
-
     if (typeof reqOrUserId === 'string') {
-      // Called as getStatus(userId)
       userId = reqOrUserId;
     } else {
-      // Called as Express handler
       userId = reqOrUserId.params?.userId || reqOrUserId.query?.userId;
     }
 
@@ -61,9 +58,8 @@ exports.getStatus = (reqOrUserId, res) => {
 };
 
 exports.getQR = (reqOrUserId, res) => {
+  let userId;
   try {
-    let userId;
-
     if (typeof reqOrUserId === 'string') {
       userId = reqOrUserId;
     } else {
@@ -82,4 +78,12 @@ exports.getQR = (reqOrUserId, res) => {
     } else {
       return qr;
     }
+  } catch (error) {
+    console.error(error);
+    if (res) {
+      res.status(500).json({ error: 'Failed to get QR' });
+    } else {
+      throw error;
+    }
   }
+};
