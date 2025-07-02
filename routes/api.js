@@ -1,53 +1,97 @@
-const express = require('express');
-const router = express.Router();
+const baileysManager = require('../services/baileysManager');
 
-const sessionController = require('../controllers/sessionController');
+// ✅ Utility: extract userId
+function getUserId(req) {
+  return req?.params?.userId || req?.query?.userId || req?.body?.userId;
+}
 
-// Get QR and Status together
-router.get('/:userId/qr-status', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const connected = sessionController.getStatus(userId);
-    const qr = sessionController.getQR(userId);
-    res.json({ connected, qr });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+// ✅ Start WhatsApp Session
+exports.startSession = async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ startSession: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
   }
-});
 
-// Start Session (connect)
-router.post('/:userId/connect', async (req, res) => {
   try {
-    const { userId } = req.params;
-    await sessionController.startSession({ body: { userId } }, res);
+    await baileysManager.startSession(userId);
+    console.log(`✅ Session started for ${userId}`);
+    res.json({ success: true, message: 'Session started' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error in startSession:', error);
+    res.status(500).json({ error: 'Failed to start session' });
   }
-});
+};
 
-// Stop Session (disconnect)
-router.post('/:userId/disconnect', async (req, res) => {
+// ✅ Stop WhatsApp Session
+exports.stopSession = async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ stopSession: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
   try {
-    const { userId } = req.params;
-    await sessionController.stopSession({ body: { userId } }, res);
+    await baileysManager.stopSession(userId);
+    console.log(`✅ Session stopped for ${userId}`);
+    res.json({ success: true, message: 'Session stopped' });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error in stopSession:', error);
+    res.status(500).json({ error: 'Failed to stop session' });
   }
-});
+};
 
-// Get only Status
-router.get('/:userId/status', (req, res) => {
+// ✅ Get WhatsApp Connection Status
+exports.getStatus = (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ getStatus: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
   try {
-    const { userId } = req.params;
-    const connected = sessionController.getStatus(userId);
-    res.json({ connected });
+    const status = baileysManager.getStatus(userId);
+    console.log(`ℹ️ Status for ${userId}: ${status}`);
+    res.json({ userId, connected: status });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: 'Internal server error' });
+    console.error('❌ Error in getStatus:', error);
+    res.status(500).json({ error: 'Failed to get status' });
   }
-});
+};
 
-module.exports = router;
+// ✅ Get QR Code
+exports.getQR = (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ getQR: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  try {
+    const qr = baileysManager.getQR(userId);
+    console.log(`ℹ️ QR fetched for ${userId}`);
+    res.json({ userId, qr });
+  } catch (error) {
+    console.error('❌ Error in getQR:', error);
+    res.status(500).json({ error: 'Failed to get QR' });
+  }
+};
+
+// ✅ Get Combined QR + Status
+exports.getQRStatus = (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ getQRStatus: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  try {
+    const connected = baileysManager.getStatus(userId);
+    const qr = baileysManager.getQR(userId);
+    console.log(`ℹ️ QRStatus for ${userId}: connected=${connected}`);
+    res.json({ userId, connected, qr });
+  } catch (error) {
+    console.error('❌ Error in getQRStatus:', error);
+    res.status(500).json({ error: 'Failed to get QR status' });
+  }
+};
