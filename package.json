@@ -1,0 +1,21 @@
+{
+  "name": "whatsapp-bridge-server",
+  "version": "1.0.0",
+  "description": "Multi-tenant WhatsApp AI bridge with Baileys",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.18",
+    "axios": "^1.10.0",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "pino": "^8.21.0",
+    "qrcode": "^1.5.4",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
