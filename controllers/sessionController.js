@@ -1,11 +1,9 @@
 const baileysManager = require('../services/baileysManager');
 
-// ✅ Utility: extract userId
 function getUserId(req) {
   return req?.params?.userId || req?.query?.userId || req?.body?.userId;
 }
 
-// ✅ Start WhatsApp Session
 exports.startSession = async (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
@@ -23,7 +21,6 @@ exports.startSession = async (req, res) => {
   }
 };
 
-// ✅ Stop WhatsApp Session
 exports.stopSession = async (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
@@ -41,7 +38,24 @@ exports.stopSession = async (req, res) => {
   }
 };
 
-// ✅ Get WhatsApp Connection Status
+// ✅ New: Restart Session
+exports.restartSession = async (req, res) => {
+  const userId = getUserId(req);
+  if (!userId) {
+    console.error('❌ restartSession: Missing userId');
+    return res.status(400).json({ error: 'Missing userId' });
+  }
+
+  try {
+    await baileysManager.restartSession(userId);
+    console.log(`✅ Session restarted for ${userId}`);
+    res.json({ success: true, message: 'Session restarted' });
+  } catch (error) {
+    console.error('❌ Error in restartSession:', error);
+    res.status(500).json({ error: 'Failed to restart session' });
+  }
+};
+
 exports.getStatus = (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
@@ -59,7 +73,6 @@ exports.getStatus = (req, res) => {
   }
 };
 
-// ✅ Get QR Code
 exports.getQR = (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
@@ -77,7 +90,6 @@ exports.getQR = (req, res) => {
   }
 };
 
-// ✅ Get Combined QR + Status
 exports.getQRStatus = (req, res) => {
   const userId = getUserId(req);
   if (!userId) {
