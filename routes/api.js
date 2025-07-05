@@ -11,6 +11,9 @@ router.post('/:userId/connect', sessionController.startSession);
 // ✅ Stop Session (disconnect)
 router.post('/:userId/disconnect', sessionController.stopSession);
 
+// ✅ Restart Session
+router.post('/:userId/restart', sessionController.restartSession);
+
 // ✅ Get only Status
 router.get('/:userId/status', sessionController.getStatus);
 
