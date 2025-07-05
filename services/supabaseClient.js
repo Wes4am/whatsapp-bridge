@@ -39,7 +39,36 @@ async function updateStatus(userId, status) {
   }
 }
 
+async function forwardMessageToWebhook(userId, message) {
+  try {
+    logger.info(`📨 Forwarding message to webhook relay for user: ${userId}`);
+
+    const response = await axios.post(
+      `${SUPABASE_URL}/functions/v1/whatsapp-webhook-relay`,
+      {
+        userId,
+        message
+      },
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    logger.info(`✅ Message forwarded to relay successfully`);
+    return response.data;
+  } catch (error) {
+    logger.error('❌ Failed to forward message to relay:', error?.response?.data || error.message);
+    return null;
+  }
+}
+
+
 module.exports = {
   getWebhookURL,
   updateStatus,
+  forwardMessageToWebhook
 };
