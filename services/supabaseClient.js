@@ -4,7 +4,7 @@ const logger = require('pino')();
 
 async function getWebhookURL(userId) {
   try {
-    const { data } = await axios.get(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
+    const { data } = await axios.get(`${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`, {
       headers: {
         apikey: SUPABASE_KEY,
         Authorization: `Bearer ${SUPABASE_KEY}`,
@@ -22,7 +22,7 @@ async function getWebhookURL(userId) {
 async function updateStatus(userId, status) {
   try {
     await axios.patch(
-      `${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`,
+      `${SUPABASE_URL}/rest/v1/profiles?id=eq.${userId}`,  // Changed from 'users' to 'profiles'
       { whatsapp_status: status },
       {
         headers: {
@@ -65,7 +65,6 @@ async function forwardMessageToWebhook(userId, message) {
     return null;
   }
 }
-
 
 module.exports = {
   getWebhookURL,
