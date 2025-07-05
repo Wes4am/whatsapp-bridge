@@ -69,26 +69,14 @@ async function startSession(userId) {
     const message = m.messages[0];
     if (message.key.fromMe) return;
 
-    const webhookUrl = await supabaseClient.getWebhookURL(userId);
-    if (!webhookUrl) {
-      logger.warn(`No webhook found for ${userId}`);
-      return;
-    }
-
-    const payload = {
-      from: message.key.remoteJid,
-      text: message.message.conversation || '',
-      timestamp: new Date().toISOString(),
-    };
-
     try {
-      await axios.post(webhookUrl, payload);
-      logger.info(`✅ Forwarded message for ${userId} to webhook`);
+      await supabaseClient.forwardMessageToWebhook(userId, message);
+      logger.info(`✅ Forwarded message to webhook relay for ${userId}`);
     } catch (error) {
-      logger.error(`❌ Failed to send to webhook for ${userId}`, error);
+      logger.error(`❌ Failed to forward message to webhook relay for ${userId}`, error);
     }
   });
-}
+} // 🔥 this was missing before!
 
 async function stopSession(userId) {
   const session = userSessions.get(userId);
