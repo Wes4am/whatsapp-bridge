@@ -8,9 +8,10 @@ const logger = pino();
 const userSessions = new Map();
 
 async function startSession(userId) {
+  // 🔥 Force stop any existing session
   if (userSessions.has(userId)) {
-    logger.info(`Session already exists for user ${userId}`);
-    return;
+    logger.warn(`Existing session found for ${userId}, stopping before restart`);
+    await stopSession(userId);
   }
 
   const sessionPath = `./sessions/${userId}`;
@@ -36,14 +37,14 @@ async function startSession(userId) {
 
     if (qr) {
       session.qr = await QRCode.toDataURL(qr);
-      logger.info(`QR generated for ${userId}`);
+      logger.info(`✅ QR generated for ${userId}`);
     }
 
     if (connection === 'open') {
       session.connected = true;
       session.qr = null;
       await updateSupabaseStatus(userId, 'connected');
-      logger.info(`WhatsApp connected for ${userId}`);
+      logger.info(`✅ WhatsApp connected for ${userId}`);
     }
 
     if (connection === 'close') {
@@ -56,7 +57,7 @@ async function startSession(userId) {
       } else {
         await updateSupabaseStatus(userId, 'disconnected');
         userSessions.delete(userId);
-        logger.warn(`Session closed for ${userId}`);
+        logger.warn(`❌ Session closed for ${userId}`);
       }
     }
   });
@@ -82,9 +83,9 @@ async function startSession(userId) {
 
     try {
       await axios.post(webhookUrl, payload);
-      logger.info(`Forwarded message for ${userId} to webhook`);
+      logger.info(`✅ Forwarded message for ${userId} to webhook`);
     } catch (error) {
-      logger.error(`Failed to send to webhook for ${userId}`, error);
+      logger.error(`❌ Failed to send to webhook for ${userId}`, error);
     }
   });
 }
@@ -92,11 +93,23 @@ async function startSession(userId) {
 async function stopSession(userId) {
   const session = userSessions.get(userId);
   if (session) {
-    await session.sock.logout();
+    try {
+      await session.sock.logout();
+    } catch (error) {
+      logger.warn(`⚠️ Error while logging out for ${userId}: ${error.message}`);
+    }
     userSessions.delete(userId);
     await updateSupabaseStatus(userId, 'disconnected');
-    logger.info(`Logged out and cleared session for ${userId}`);
+    logger.info(`✅ Logged out and cleared session for ${userId}`);
+  } else {
+    logger.info(`ℹ️ No active session found for ${userId} to stop`);
   }
+}
+
+// ✅ Extra utility to force a restart
+async function restartSession(userId) {
+  await stopSession(userId);
+  await startSession(userId);
 }
 
 function getStatus(userId) {
@@ -109,7 +122,6 @@ function getQR(userId) {
   return session ? session.qr : null;
 }
 
-// ✅ Calls EDGE_UPDATE_STATUS_URL to update Supabase
 async function updateSupabaseStatus(userId, status) {
   const edgeFunctionUrl = process.env.EDGE_UPDATE_STATUS_URL;
   if (!edgeFunctionUrl) {
@@ -119,15 +131,16 @@ async function updateSupabaseStatus(userId, status) {
 
   try {
     await axios.post(edgeFunctionUrl, { userId, status });
-    logger.info(`Updated status in Supabase for ${userId}: ${status}`);
+    logger.info(`✅ Updated status in Supabase for ${userId}: ${status}`);
   } catch (error) {
-    logger.error(`Failed to update status in Supabase for ${userId}`, error);
+    logger.error(`❌ Failed to update status in Supabase for ${userId}`, error);
   }
 }
 
 module.exports = {
   startSession,
   stopSession,
+  restartSession,
   getStatus,
   getQR,
 };
