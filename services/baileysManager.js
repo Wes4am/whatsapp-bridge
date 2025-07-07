@@ -125,10 +125,22 @@ async function updateSupabaseStatus(userId, status) {
   }
 }
 
+async function sendMessage(userId, message) {
+  const session = userSessions.get(userId);
+  if (!session || !session.sock) {
+    throw new Error(`No active session for user ${userId}`);
+  }
+
+  // Assumes AI response is structured with .to and .body.text
+  await session.sock.sendMessage(message.to, { text: message.body.text });
+}
+
+
 module.exports = {
   startSession,
   stopSession,
   restartSession,
   getStatus,
   getQR,
+  sendMessage,
 };
