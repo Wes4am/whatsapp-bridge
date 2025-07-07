@@ -20,4 +20,7 @@ router.get('/:userId/status', sessionController.getStatus);
 // ✅ Get only QR
 router.get('/:userId/qr', sessionController.getQR);
 
+// ✅ Receives a Message
+router.post('/send-message', sessionController.sendMessage);
+
 module.exports = router;
