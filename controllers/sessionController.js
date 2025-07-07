@@ -107,3 +107,21 @@ exports.getQRStatus = (req, res) => {
     res.status(500).json({ error: 'Failed to get QR status' });
   }
 };
+
+// ✅ NEW: Send Message endpoint for AI responses
+exports.sendMessage = async (req, res) => {
+  const { userId, message } = req.body;
+  if (!userId || !message) {
+    console.error('❌ sendMessage: Missing userId or message');
+    return res.status(400).json({ error: 'Missing userId or message' });
+  }
+
+  try {
+    await baileysManager.sendMessage(userId, message);
+    console.log(`✅ Message sent to WhatsApp for ${userId}`);
+    res.json({ success: true, message: 'Message sent via WhatsApp' });
+  } catch (error) {
+    console.error('❌ Error in sendMessage:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+};
