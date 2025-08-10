@@ -2,24 +2,50 @@ const { useMultiFileAuthState, makeWASocket, DisconnectReason } = require('@whis
 const pino = require('pino');
 const QRCode = require('qrcode');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 const supabaseClient = require('./supabaseClient');
 
 const logger = pino();
 const userSessions = new Map();
 
-// Add configuration constants
-const MAX_RETRY_ATTEMPTS = 3;
+// Configuration constants
+const MAX_RETRY_ATTEMPTS = 2; // Reduced retries
 const RETRY_DELAY = 3000; // 3 seconds
 const QR_TIMEOUT = 30000; // 30 seconds for QR generation
+
+// Ensure sessions directory exists
+function ensureSessionsDirectory() {
+  const sessionsDir = './sessions';
+  if (!fs.existsSync(sessionsDir)) {
+    fs.mkdirSync(sessionsDir, { recursive: true });
+    logger.info('📁 Created sessions directory');
+  }
+}
+
+// Clean corrupted session files
+async function cleanSession(userId) {
+  const sessionPath = `./sessions/${userId}`;
+  try {
+    if (fs.existsSync(sessionPath)) {
+      fs.rmSync(sessionPath, { recursive: true, force: true });
+      logger.info(`🧹 Cleaned corrupted session files for ${userId}`);
+    }
+  } catch (error) {
+    logger.error(`Failed to clean session for ${userId}:`, error);
+  }
+}
 
 async function startSession(userId) {
   logger.info(`🚀 Starting session for ${userId}`);
   
-  // 🔥 Force stop any existing session
+  // Ensure sessions directory exists
+  ensureSessionsDirectory();
+  
+  // Force stop any existing session
   if (userSessions.has(userId)) {
     logger.warn(`Existing session found for ${userId}, stopping before restart`);
     await stopSession(userId);
-    // Add delay to ensure cleanup
     await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
@@ -35,7 +61,6 @@ async function startSession(userId) {
       connectTimeoutMs: 60000,
       defaultQueryTimeoutMs: 60000,
       keepAliveIntervalMs: 30000,
-      // Better connection settings
       browser: ['WhatsApp Bridge', 'Chrome', '1.0.0'],
       syncFullHistory: false,
       generateHighQualityLinkPreview: false,
@@ -49,6 +74,7 @@ async function startSession(userId) {
       connected: false,
       retryCount: 0,
       lastQRTime: null,
+      sessionCorrupted: false,
     });
 
     sock.ev.on('connection.update', async (update) => {
@@ -71,6 +97,7 @@ async function startSession(userId) {
         session.connected = true;
         session.qr = null;
         session.retryCount = 0;
+        session.sessionCorrupted = false;
         await updateSupabaseStatus(userId, 'connected');
         logger.info(`✅ WhatsApp connected for ${userId}`);
       }
@@ -80,30 +107,34 @@ async function startSession(userId) {
         session.qr = null;
         
         const statusCode = lastDisconnect?.error?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        logger.warn(`Connection closed for ${userId}, status: ${statusCode}`);
         
-        logger.warn(`Connection closed for ${userId}, status: ${statusCode}, shouldReconnect: ${shouldReconnect}`);
-        
-        if (shouldReconnect && session.retryCount < MAX_RETRY_ATTEMPTS) {
+        // Handle different disconnect reasons
+        if (statusCode === DisconnectReason.loggedOut || statusCode === 401) {
+          // Session is corrupted/invalid - clean it and start fresh
+          logger.warn(`❌ Session corrupted for ${userId} (status: ${statusCode}) - cleaning session`);
+          session.sessionCorrupted = true;
+          await cleanSession(userId);
+          await updateSupabaseStatus(userId, 'disconnected');
+          userSessions.delete(userId);
+          
+        } else if (statusCode !== DisconnectReason.connectionClosed && session.retryCount < MAX_RETRY_ATTEMPTS) {
+          // Retry for other connection issues
           session.retryCount++;
           logger.warn(`Reconnecting for ${userId} (attempt ${session.retryCount}/${MAX_RETRY_ATTEMPTS})`);
           
-          // Add exponential backoff
-          const delay = RETRY_DELAY * Math.pow(2, session.retryCount - 1);
+          const delay = RETRY_DELAY * session.retryCount;
           setTimeout(() => {
             if (userSessions.has(userId)) {
               startSession(userId);
             }
           }, delay);
+          
         } else {
+          // Max retries reached or permanent disconnect
           await updateSupabaseStatus(userId, 'disconnected');
           userSessions.delete(userId);
-          
-          if (statusCode === DisconnectReason.loggedOut) {
-            logger.warn(`❌ User logged out: ${userId}`);
-          } else {
-            logger.warn(`❌ Session closed after max retries for ${userId}`);
-          }
+          logger.warn(`❌ Session closed permanently for ${userId}`);
         }
       }
     });
@@ -123,7 +154,7 @@ async function startSession(userId) {
       }
     });
 
-    // Set a timeout for QR generation
+    // Set timeout for QR generation
     setTimeout(() => {
       const session = userSessions.get(userId);
       if (session && !session.connected && !session.qr) {
@@ -133,6 +164,8 @@ async function startSession(userId) {
 
   } catch (error) {
     logger.error(`Failed to start session for ${userId}:`, error);
+    // If session creation fails, clean it and try once more
+    await cleanSession(userId);
     userSessions.delete(userId);
     throw error;
   }
@@ -158,7 +191,11 @@ async function stopSession(userId) {
 
 async function restartSession(userId) {
   logger.info(`🔄 Restarting session for ${userId}`);
+  
+  // Clean any corrupted session data first
+  await cleanSession(userId);
   await stopSession(userId);
+  
   // Add delay before restarting
   await new Promise(resolve => setTimeout(resolve, 3000));
   await startSession(userId);
@@ -188,8 +225,15 @@ function getQR(userId) {
 
 async function updateSupabaseStatus(userId, status) {
   const edgeFunctionUrl = process.env.EDGE_UPDATE_STATUS_URL;
+  const supabaseKey = process.env.SUPABASE_KEY;
+  
   if (!edgeFunctionUrl) {
     logger.warn('⚠️ No EDGE_UPDATE_STATUS_URL configured - skipping status update');
+    return;
+  }
+
+  if (!supabaseKey) {
+    logger.warn('⚠️ No SUPABASE_KEY configured - skipping status update');
     return;
   }
 
@@ -202,26 +246,32 @@ async function updateSupabaseStatus(userId, status) {
         userId, 
         status 
       }, {
-        timeout: 10000,
+        timeout: 15000,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY}`
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey
         }
       });
       
-      logger.info(`✅ Updated status in Supabase for ${userId}: ${status}`);
+      logger.info(`✅ Updated status in Supabase for ${userId}: ${status} (Status: ${response.status})`);
       return;
     } catch (error) {
       attempts++;
-      logger.error(`❌ Attempt ${attempts} - Failed to update status in Supabase for ${userId}:`, {
+      const errorDetails = {
         message: error.message,
         status: error.response?.status,
+        statusText: error.response?.statusText,
         data: error.response?.data,
-        url: edgeFunctionUrl
-      });
+        attempt: attempts
+      };
+      
+      logger.error(`❌ Attempt ${attempts} - Failed to update status in Supabase for ${userId}:`, errorDetails);
       
       if (attempts < maxRetries) {
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+        const delay = 1000 * attempts;
+        logger.info(`⏳ Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
   }
@@ -253,7 +303,21 @@ async function sendMessage(userId, message) {
   }
 }
 
-// Add utility function to get session info
+// Utility function to clean all sessions (for debugging)
+async function cleanAllSessions() {
+  try {
+    const sessionsDir = './sessions';
+    if (fs.existsSync(sessionsDir)) {
+      fs.rmSync(sessionsDir, { recursive: true, force: true });
+      logger.info('🧹 Cleaned all session files');
+    }
+    ensureSessionsDirectory();
+  } catch (error) {
+    logger.error('Failed to clean all sessions:', error);
+  }
+}
+
+// Get session info for debugging
 function getSessionInfo(userId) {
   const session = userSessions.get(userId);
   if (!session) return null;
@@ -262,7 +326,8 @@ function getSessionInfo(userId) {
     connected: session.connected,
     hasQR: !!session.qr,
     retryCount: session.retryCount,
-    lastQRTime: session.lastQRTime
+    lastQRTime: session.lastQRTime,
+    sessionCorrupted: session.sessionCorrupted
   };
 }
 
@@ -274,4 +339,6 @@ module.exports = {
   getQR,
   sendMessage,
   getSessionInfo,
+  cleanAllSessions,
+  cleanSession
 };
