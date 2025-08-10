@@ -1,4 +1,110 @@
 const baileysManager = require('../services/baileysManager');
+const fs = require('fs');
+const path = require('path');
+
+exports.setupSessions = async (req, res) => {
+  try {
+    console.log('🚀 Setting up WhatsApp Bridge Backend...');
+    
+    const results = {
+      sessionsDir: false,
+      cleanedSessions: 0,
+      envVars: {},
+      gitignore: false
+    };
+    
+    // 1. Create sessions directory
+    const sessionsDir = './sessions';
+    if (!fs.existsSync(sessionsDir)) {
+      fs.mkdirSync(sessionsDir, { recursive: true });
+      console.log('✅ Created sessions directory');
+      results.sessionsDir = 'created';
+    } else {
+      console.log('ℹ️ Sessions directory already exists');
+      results.sessionsDir = 'exists';
+    }
+    
+    // 2. Clean any existing corrupted sessions
+    try {
+      const files = fs.readdirSync(sessionsDir);
+      if (files.length > 0) {
+        console.log(`🧹 Found ${files.length} existing session(s), cleaning...`);
+        files.forEach(file => {
+          const filePath = path.join(sessionsDir, file);
+          if (fs.statSync(filePath).isDirectory()) {
+            fs.rmSync(filePath, { recursive: true, force: true });
+            console.log(`   Cleaned session: ${file}`);
+            results.cleanedSessions++;
+          }
+        });
+        console.log('✅ All existing sessions cleaned');
+      } else {
+        console.log('ℹ️ No existing sessions to clean');
+      }
+    } catch (error) {
+      console.log('⚠️ Error cleaning sessions:', error.message);
+    }
+    
+    // 3. Check environment variables
+    console.log('🔧 Checking environment variables...');
+    const requiredEnvVars = [
+      'EDGE_UPDATE_STATUS_URL',
+      'SUPABASE_KEY',
+      'SUPABASE_URL',
+      'PORT'
+    ];
+    
+    requiredEnvVars.forEach(varName => {
+      if (process.env[varName]) {
+        console.log(`✅ ${varName}: ${process.env[varName].substring(0, 20)}...`);
+        results.envVars[varName] = 'present';
+      } else {
+        console.log(`❌ ${varName}: Missing`);
+        results.envVars[varName] = 'missing';
+      }
+    });
+    
+    // 4. Create .gitignore for sessions if it doesn't exist
+    const gitignorePath = './.gitignore';
+    let gitignoreContent = '';
+    
+    try {
+      if (fs.existsSync(gitignorePath)) {
+        gitignoreContent = fs.readFileSync(gitignorePath, 'utf8');
+      }
+      
+      if (!gitignoreContent.includes('sessions/')) {
+        const newGitignore = gitignoreContent + '\n# WhatsApp session files\nsessions/\n*.session\n';
+        fs.writeFileSync(gitignorePath, newGitignore);
+        console.log('✅ Updated .gitignore to exclude session files');
+        results.gitignore = 'updated';
+      } else {
+        console.log('ℹ️ .gitignore already configured for sessions');
+        results.gitignore = 'exists';
+      }
+    } catch (error) {
+      console.log('⚠️ Error updating .gitignore:', error.message);
+      results.gitignore = 'error';
+    }
+    
+    console.log('🎉 Setup complete! Backend is ready.');
+    
+    res.json({
+      success: true,
+      message: 'Setup completed successfully',
+      results: results,
+      timestamp: new Date().toISOString()
+    });
+    
+  } catch (error) {
+    console.error('❌ Setup failed:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Setup failed',
+      details: error.message
+    });
+  }
+};
 
 function getUserId(req) {
   return req?.params?.userId || req?.query?.userId || req?.body?.userId;
