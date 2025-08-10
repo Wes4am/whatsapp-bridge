@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const sessionController = require('../controllers/sessionController');
 
+// ✅ Setup endpoint (NEW - add this line)
+router.post('/setup', sessionController.setupSessions);
+
 // ✅ Get QR and Status together
 router.get('/:userId/qr-status', sessionController.getQRStatus);
 
